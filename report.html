@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>J-space Stage 1 report -- gpt2</title>
+<title>J-space Stage 1 report -- Qwen2.5-1.5B-Instruct</title>
 <style>
 body {
   font-family: -apple-system, "Segoe UI", Arial, sans-serif;
@@ -86,54 +86,54 @@ table.readout mark { background: #ffe066; padding: 0 2px; border-radius: 2px; }
 <header>
 <h1>Stage 1 Report</h1>
 <dl>
-<dt>model</dt><dd>gpt2</dd>
-<dt>prompt</dt><dd>I went up to my friend and said</dd>
-<dt>steering</dt><dd>token_diff -- pos_token=&#x27; spider&#x27;  neg_token=&#x27; insect&#x27;</dd>
+<dt>model</dt><dd>Qwen2.5-1.5B-Instruct</dd>
+<dt>prompt</dt><dd>My favourite sport is</dd>
+<dt>steering</dt><dd>token_diff -- pos_token=&#x27; rugby&#x27;  neg_token=&#x27; basketball&#x27;</dd>
 </dl>
 <div class="generated-label">baseline generation</div>
-<pre>I went up to my friend and said, &quot;I&#x27;m going to go to the gym and do some cardio.&quot;</pre>
+<pre>My favourite sport is basketball. I like basketball very much. I think it is very interesting. I like to watch basketball games on TV. I like to play basketball with</pre>
 </header>
-<section class="coefficient-section"><h2>Coefficient 0.0</h2><div class="layer-grid"><div class="layer-cell"><h3>Layer 4</h3><table class="readout"><thead><tr><th>#</th><th>baseline token</th><th>logit</th><th>steered token</th><th>logit</th></tr></thead><tbody><tr><td>0</td><td> goodbye</td><td>23.44</td><td> goodbye</td><td>23.44</td></tr>
-<tr><td>1</td><td> hello</td><td>18.28</td><td> hello</td><td>18.28</td></tr>
-<tr><td>2</td><td> that</td><td>17.83</td><td> that</td><td>17.83</td></tr>
-<tr><td>3</td><td> it</td><td>17.81</td><td> it</td><td>17.81</td></tr>
-<tr><td>4</td><td> about</td><td>17.32</td><td> about</td><td>17.32</td></tr>
-<tr><td>5</td><td> my</td><td>16.99</td><td> my</td><td>16.99</td></tr>
-<tr><td>6</td><td> nothing</td><td>16.56</td><td> nothing</td><td>16.56</td></tr>
-<tr><td>7</td><td> the</td><td>16.01</td><td> the</td><td>16.01</td></tr>
-<tr><td>8</td><td> a</td><td>15.95</td><td> a</td><td>15.95</td></tr>
-<tr><td>9</td><td>:</td><td>15.92</td><td>:</td><td>15.92</td></tr></tbody></table><div class="generated-label">steered generation</div><pre>I went up to my friend and said, &quot;I&#x27;m going to go to the gym and do some cardio.&quot;</pre></div>
-<div class="layer-cell"><h3>Layer 7</h3><table class="readout"><thead><tr><th>#</th><th>baseline token</th><th>logit</th><th>steered token</th><th>logit</th></tr></thead><tbody><tr><td>0</td><td> goodbye</td><td>28.86</td><td> goodbye</td><td>28.86</td></tr>
-<tr><td>1</td><td> hello</td><td>27.88</td><td> hello</td><td>27.88</td></tr>
-<tr><td>2</td><td> hi</td><td>23.53</td><td> hi</td><td>23.53</td></tr>
-<tr><td>3</td><td> bye</td><td>22.33</td><td> bye</td><td>22.33</td></tr>
-<tr><td>4</td><td> loudly</td><td>21.32</td><td> loudly</td><td>21.32</td></tr>
-<tr><td>5</td><td> aloud</td><td>20.74</td><td> aloud</td><td>20.74</td></tr>
-<tr><td>6</td><td> hey</td><td>20.24</td><td> hey</td><td>20.24</td></tr>
-<tr><td>7</td><td> my</td><td>20.24</td><td> my</td><td>20.24</td></tr>
-<tr><td>8</td><td> something</td><td>20.22</td><td> something</td><td>20.22</td></tr>
-<tr><td>9</td><td> that</td><td>20.20</td><td> that</td><td>20.20</td></tr></tbody></table><div class="generated-label">steered generation</div><pre>I went up to my friend and said, &quot;I&#x27;m going to go to the gym and do some cardio.&quot;</pre></div></div></section>
-<section class="coefficient-section"><h2>Coefficient 8.0</h2><div class="layer-grid"><div class="layer-cell"><h3>Layer 4</h3><table class="readout"><thead><tr><th>#</th><th>baseline token</th><th>logit</th><th>steered token</th><th>logit</th></tr></thead><tbody><tr><td>0</td><td> goodbye</td><td>23.44</td><td><mark> spider</mark></td><td>26.53</td></tr>
-<tr><td>1</td><td> hello</td><td>18.28</td><td> goodbye</td><td>23.49</td></tr>
-<tr><td>2</td><td> that</td><td>17.83</td><td> Spider</td><td>20.85</td></tr>
-<tr><td>3</td><td> it</td><td>17.81</td><td> spiders</td><td>20.84</td></tr>
-<tr><td>4</td><td> about</td><td>17.32</td><td> hello</td><td>19.12</td></tr>
-<tr><td>5</td><td> my</td><td>16.99</td><td> that</td><td>17.21</td></tr>
-<tr><td>6</td><td> nothing</td><td>16.56</td><td> Sponge</td><td>16.77</td></tr>
-<tr><td>7</td><td> the</td><td>16.01</td><td> Alexa</td><td>16.68</td></tr>
-<tr><td>8</td><td> a</td><td>15.95</td><td> it</td><td>16.39</td></tr>
-<tr><td>9</td><td>:</td><td>15.92</td><td>:</td><td>16.32</td></tr></tbody></table><div class="generated-label">steered generation</div><pre>I went up to my friend and said, &quot;I&#x27;m going to go up to my friend and I&#x27;m going</pre></div>
-<div class="layer-cell"><h3>Layer 7</h3><table class="readout"><thead><tr><th>#</th><th>baseline token</th><th>logit</th><th>steered token</th><th>logit</th></tr></thead><tbody><tr><td>0</td><td> goodbye</td><td>28.86</td><td> goodbye</td><td>29.00</td></tr>
-<tr><td>1</td><td> hello</td><td>27.88</td><td> hello</td><td>28.24</td></tr>
-<tr><td>2</td><td> hi</td><td>23.53</td><td> bye</td><td>23.61</td></tr>
-<tr><td>3</td><td> bye</td><td>22.33</td><td> hi</td><td>22.07</td></tr>
-<tr><td>4</td><td> loudly</td><td>21.32</td><td><mark> spider</mark></td><td>21.02</td></tr>
-<tr><td>5</td><td> aloud</td><td>20.74</td><td> congratulations</td><td>20.66</td></tr>
-<tr><td>6</td><td> hey</td><td>20.24</td><td> hey</td><td>20.63</td></tr>
-<tr><td>7</td><td> my</td><td>20.24</td><td> loudly</td><td>19.86</td></tr>
-<tr><td>8</td><td> something</td><td>20.22</td><td> that</td><td>19.82</td></tr>
-<tr><td>9</td><td> that</td><td>20.20</td><td>:</td><td>19.58</td></tr></tbody></table><div class="generated-label">steered generation</div><pre>I went up to my friend and said, &quot;I&#x27;m going to buy a new car.&quot;
+<section class="coefficient-section"><h2>Coefficient 1.0</h2><div class="layer-grid"><div class="layer-cell"><h3>Layer 17</h3><table class="readout"><thead><tr><th>#</th><th>baseline token</th><th>logit</th><th>steered token</th><th>logit</th></tr></thead><tbody><tr><td>0</td><td> ______</td><td>17.82</td><td> ______</td><td>17.53</td></tr>
+<tr><td>1</td><td>________</td><td>17.05</td><td>________</td><td>16.69</td></tr>
+<tr><td>2</td><td>____</td><td>16.81</td><td>____</td><td>16.39</td></tr>
+<tr><td>3</td><td> __</td><td>16.03</td><td> __</td><td>15.79</td></tr>
+<tr><td>4</td><td> ____</td><td>15.92</td><td> ____</td><td>15.68</td></tr>
+<tr><td>5</td><td>____________</td><td>15.51</td><td>_____</td><td>15.29</td></tr>
+<tr><td>6</td><td>_____</td><td>15.44</td><td>____________</td><td>15.01</td></tr>
+<tr><td>7</td><td> _____</td><td>14.88</td><td> _____</td><td>14.73</td></tr>
+<tr><td>8</td><td> __________________</td><td>14.77</td><td> __________________</td><td>14.42</td></tr>
+<tr><td>9</td><td>________________</td><td>13.72</td><td>________________</td><td>13.34</td></tr></tbody></table><div class="generated-label">steered generation</div><pre>My favourite sport is basketball. I like basketball very much. I think it is very interesting. I like to watch basketball games on TV. I like to play basketball with</pre></div></div></section>
+<section class="coefficient-section"><h2>Coefficient 2.0</h2><div class="layer-grid"><div class="layer-cell"><h3>Layer 17</h3><table class="readout"><thead><tr><th>#</th><th>baseline token</th><th>logit</th><th>steered token</th><th>logit</th></tr></thead><tbody><tr><td>0</td><td> ______</td><td>17.82</td><td> ______</td><td>17.22</td></tr>
+<tr><td>1</td><td>________</td><td>17.05</td><td>________</td><td>16.30</td></tr>
+<tr><td>2</td><td>____</td><td>16.81</td><td>____</td><td>15.94</td></tr>
+<tr><td>3</td><td> __</td><td>16.03</td><td> __</td><td>15.52</td></tr>
+<tr><td>4</td><td> ____</td><td>15.92</td><td> ____</td><td>15.40</td></tr>
+<tr><td>5</td><td>____________</td><td>15.51</td><td>_____</td><td>15.10</td></tr>
+<tr><td>6</td><td>_____</td><td>15.44</td><td> _____</td><td>14.56</td></tr>
+<tr><td>7</td><td> _____</td><td>14.88</td><td>____________</td><td>14.48</td></tr>
+<tr><td>8</td><td> __________________</td><td>14.77</td><td> __________________</td><td>14.05</td></tr>
+<tr><td>9</td><td>________________</td><td>13.72</td><td>＿</td><td>13.36</td></tr></tbody></table><div class="generated-label">steered generation</div><pre>My favourite sport is______（游泳）．
+swimming
 
-&quot;Oh</pre></div></div></section>
+I like______（游泳）．
+swimming
+
+I like______（游泳）．</pre></div></div></section>
+<section class="coefficient-section"><h2>Coefficient 3.0</h2><div class="layer-grid"><div class="layer-cell"><h3>Layer 17</h3><table class="readout"><thead><tr><th>#</th><th>baseline token</th><th>logit</th><th>steered token</th><th>logit</th></tr></thead><tbody><tr><td>0</td><td> ______</td><td>17.82</td><td> ______</td><td>16.87</td></tr>
+<tr><td>1</td><td>________</td><td>17.05</td><td>________</td><td>15.87</td></tr>
+<tr><td>2</td><td>____</td><td>16.81</td><td>____</td><td>15.46</td></tr>
+<tr><td>3</td><td> __</td><td>16.03</td><td> __</td><td>15.22</td></tr>
+<tr><td>4</td><td> ____</td><td>15.92</td><td> ____</td><td>15.10</td></tr>
+<tr><td>5</td><td>____________</td><td>15.51</td><td>_____</td><td>14.88</td></tr>
+<tr><td>6</td><td>_____</td><td>15.44</td><td> _____</td><td>14.36</td></tr>
+<tr><td>7</td><td> _____</td><td>14.88</td><td>____________</td><td>13.92</td></tr>
+<tr><td>8</td><td> __________________</td><td>14.77</td><td><mark> rugby</mark></td><td>13.79</td></tr>
+<tr><td>9</td><td>________________</td><td>13.72</td><td> __________________</td><td>13.64</td></tr></tbody></table><div class="generated-label">steered generation</div><pre>My favourite sport is______（游泳）．
+swimming
+
+I like______（游泳）．
+swimming
+
+I like______（游泳）．</pre></div></div></section>
 </body>
 </html>

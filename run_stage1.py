@@ -9,7 +9,9 @@ See README.md for full setup instructions and CLAUDE.md for the background on wh
 """
 from __future__ import annotations
 
+import pathlib
 import sys
+import webbrowser
 
 import torch
 from transformer_lens import HookedTransformer
@@ -171,6 +173,11 @@ def main() -> None:
             report_data=report_data,
         )
         print(f"Report written to {cfg.report}")
+        if not cfg.no_open:
+            # Open the finished report in the default browser so the user sees the result
+            # immediately once the run completes. The file:// URI form is the reliable
+            # cross-platform way to hand a local path to webbrowser.
+            webbrowser.open(pathlib.Path(cfg.report).resolve().as_uri())
 
 
 if __name__ == "__main__":

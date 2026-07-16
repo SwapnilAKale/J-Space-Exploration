@@ -35,6 +35,7 @@ class Config:
     observe: bool = False
     info: bool = False
     report: str | None = None  # None => no report; otherwise the HTML output path
+    no_open: bool = False  # when a report is written, suppress auto-opening it in the browser
 
     def __post_init__(self) -> None:
         defaults = _DEFAULT_CONCEPTS.get(self.steering_method)
@@ -83,6 +84,8 @@ def parse_args(argv: list[str] | None = None) -> Config:
     parser.add_argument("--report", nargs="?", const="report.html", default=d.report,
                          help="Write a self-contained HTML report after the sweep to PATH "
                               "(default report.html if no path is given). Off by default.")
+    parser.add_argument("--no-open", dest="no_open", action="store_true", default=d.no_open,
+                         help="When a report is written, do not auto-open it in the browser.")
     args = parser.parse_args(argv)
 
     return Config(
@@ -98,4 +101,5 @@ def parse_args(argv: list[str] | None = None) -> Config:
         observe=args.observe,
         info=args.info,
         report=args.report,
+        no_open=args.no_open,
     )
