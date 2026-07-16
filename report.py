@@ -6,7 +6,9 @@ it only imports Config for typing, run_stage1.py imports this module, never the 
 """
 from __future__ import annotations
 
+import base64
 import html as html_lib
+import re
 
 from config import Config
 
@@ -26,6 +28,17 @@ header {
   border-bottom: 2px solid #333;
 }
 header h1 { margin: 0 0 0.75rem 0; }
+#download-md-btn {
+  background: #2b2b2b;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  margin-bottom: 1rem;
+}
+#download-md-btn:hover { background: #444; }
 header dl {
   display: grid;
   grid-template-columns: max-content 1fr;
@@ -158,6 +171,115 @@ def _coefficient_section_html(
     )
 
 
+def _md_fence(text: str) -> str:
+    """A backtick fence longer than any backtick run already in text, min length 3.
+
+    Guards against the generation itself containing a run of backticks that would
+    prematurely close a fixed-length ``` fence -- scans the whole text (not just line
+    starts), which is conservative but always correct.
+    """
+    runs = re.findall(r"`+", text)
+    longest = max((len(r) for r in runs), default=0)
+    return "`" * max(3, longest + 1)
+
+
+def _md_token_cell(token: str) -> str:
+    """Backtick-wrap a table cell so |, _, * etc. render as literal characters instead of
+    table delimiters or Markdown emphasis. Falls back to a double-backtick delimiter if the
+    token itself contains a backtick, padded with a space when the token starts/ends with a
+    backtick (standard CommonMark code-span convention -- protects the delimiter boundary,
+    the token's own characters are untouched and the padding is stripped on render).
+    """
+    if "`" not in token:
+        return f"`{token}`"
+    padded = f" {token} " if token.startswith("`") or token.endswith("`") else token
+    return f"``{padded}``"
+
+
+def _readout_table_md(baseline: list[tuple[str, float]], steered: list[tuple[str, float]]) -> str:
+    lines = [
+        "| # | baseline token | logit | steered token | logit |",
+        "|---|---|---|---|---|",
+    ]
+    for i, ((b_tok, b_val), (s_tok, s_val)) in enumerate(zip(baseline, steered)):
+        lines.append(
+            f"| {i} | {_md_token_cell(b_tok)} | {b_val:.2f} | "
+            f"{_md_token_cell(s_tok)} | {s_val:.2f} |"
+        )
+    return "\n".join(lines)
+
+
+def _layer_section_md(layer: int, entry: dict) -> str:
+    table = _readout_table_md(entry["baseline_readout"], entry["steered_readout"])
+    fence = _md_fence(entry["steered_text"])
+    return (
+        f"### Layer {layer}\n\n"
+        f"{table}\n\n"
+        f"**Steered generation:**\n\n"
+        f"{fence}\n{entry['steered_text']}\n{fence}\n"
+    )
+
+
+def _coefficient_section_md(
+    coefficient: float, layers: list[int], layer_entries: dict[int, dict]
+) -> str:
+    parts = [f"## Coefficient {coefficient}\n"]
+    for layer in layers:
+        if layer in layer_entries:
+            parts.append(_layer_section_md(layer, layer_entries[layer]))
+    return "\n".join(parts)
+
+
+def _build_markdown(
+    cfg: Config,
+    model_name: str,
+    concept_desc: str,
+    baseline_text: str,
+    layers: list[int],
+    report_data: dict[float, dict[int, dict]],
+) -> str:
+    baseline_fence = _md_fence(baseline_text)
+    sections = "\n".join(
+        _coefficient_section_md(coefficient, layers, report_data[coefficient])
+        for coefficient in cfg.coefficients
+        if coefficient in report_data
+    )
+    return (
+        f"# Stage 1 Report\n\n"
+        f"**model:** {model_name}\n\n"
+        f"**prompt:** {cfg.prompt}\n\n"
+        f"**steering:** {concept_desc}\n\n"
+        f"## Baseline generation\n\n"
+        f"{baseline_fence}\n{baseline_text}\n{baseline_fence}\n\n"
+        f"{sections}\n"
+    )
+
+
+# Plain string, not an f-string -- see _CSS's own comment for why. The Base64 payload it
+# reads from the DOM at click-time can never contain '<', so it can't accidentally close
+# this or the adjacent script tag; decoding straight to a Uint8Array (never a JS string)
+# sidesteps every Unicode/CJK string-encoding pitfall entirely.
+_DOWNLOAD_BUTTON_JS = """
+document.getElementById('download-md-btn').addEventListener('click', function () {
+  var b64 = document.getElementById('report-markdown-b64').textContent;
+  var binary = atob(b64);
+  var bytes = new Uint8Array(binary.length);
+  for (var i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  var blob = new Blob([bytes], { type: 'text/markdown;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'report.md';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+"""
+
+
 def write_html_report(
     path: str,
     cfg: Config,
@@ -181,6 +303,9 @@ def write_html_report(
         if coefficient in report_data
     )
 
+    markdown_doc = _build_markdown(cfg, model_name, concept_desc, baseline_text, layers, report_data)
+    markdown_b64 = base64.b64encode(markdown_doc.encode("utf-8")).decode("ascii")
+
     html_doc = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -191,6 +316,7 @@ def write_html_report(
 <body>
 <header>
 <h1>Stage 1 Report</h1>
+<button id="download-md-btn" type="button">Download as Markdown</button>
 <dl>
 <dt>model</dt><dd>{_esc(model_name)}</dd>
 <dt>prompt</dt><dd>{_esc(cfg.prompt)}</dd>
@@ -200,6 +326,8 @@ def write_html_report(
 <pre>{_esc(baseline_text)}</pre>
 </header>
 {sections}
+<script id="report-markdown-b64" type="text/plain">{markdown_b64}</script>
+<script>{_DOWNLOAD_BUTTON_JS}</script>
 </body>
 </html>
 """

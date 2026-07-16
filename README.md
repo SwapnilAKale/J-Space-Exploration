@@ -2,7 +2,10 @@
 
 Reach inside a small language model, read what a middle layer is "thinking" (the J-space,
 via a logit-lens readout), inject a steering vector, and watch the generated text change.
-Background and the full three-stage plan: see [CLAUDE.md](CLAUDE.md).
+Background and the full three-stage plan: see [CLAUDE.md](CLAUDE.md). **New here?** After
+setup, skim [FINDINGS.md](FINDINGS.md) — it explains the non-obvious behaviour (why the
+readout can disagree with the output, why Qwen sometimes prints Chinese, why the same
+coefficient behaves differently on different models) so you don't have to rediscover it.
 
 Stage 1 only. CPU-only (no CUDA) — see [CLAUDE.md](CLAUDE.md) section 2 for hardware
 constraints.
@@ -79,6 +82,33 @@ readout (logit-lens tokens) side by side, then the baseline vs steered generated
 `--coefficient 0` should exactly reproduce the baseline — a built-in sanity check that the
 steering hook is truly additive.
 
+### What each part of a command means (plain language)
+
+Take this command:
+
+```powershell
+python run_stage1.py --model gpt2 --prompt "My favourite sport is" --steering-method token_diff --pos " rugby" --neg " football" --coefficient 0 4 8 --max-new-tokens 20
+```
+
+Piece by piece:
+
+- `python run_stage1.py` — runs the script.
+- `--model gpt2` — which model to load and inspect. `gpt2` is tiny and instant; `Qwen/Qwen2.5-1.5B-Instruct` is bigger, smarter, and much slower on CPU.
+- `--prompt "My favourite sport is"` — the text the model continues. For gpt2, give it the *start of a sentence* that leads to your answer, not a command like "Choose a sport" (gpt2 only completes text, it doesn't obey instructions).
+- `--steering-method token_diff` — how the "nudge" is built. `token_diff` = from two single words; `actadd` = from two full sentences.
+- `--pos " rugby"` — the word/idea to push *toward*. The leading space matters (it's part of the token).
+- `--neg " football"` — the word/idea to push *away from* (usually whatever the model says on its own).
+- `--coefficient 0 4 8` — how hard to push, tried at several strengths in one run. `0` = no push (a baseline sanity check). There is no universal right number, so you sweep several.
+- `--max-new-tokens 20` — how many words to generate after the prompt.
+
+Anything you don't set falls back to a default (see the table below), so `python run_stage1.py`
+on its own runs a full demo on gpt2.
+
+**A good first-time workflow:**
+1. `python run_stage1.py --observe --model gpt2 --prompt "My favourite sport is"` — see what the model says on its own, no steering.
+2. Pick a word to push toward, then steer: add `--steering-method token_diff --pos " rugby" --neg " football" --coefficient 0 2 4 6 8`.
+3. Read the **STEERED generation text** (not the readout table) to judge whether it worked — and push the coefficient higher to find where it breaks.
+
 ### CLI flags
 
 | Flag | Default | Meaning |
@@ -91,9 +121,38 @@ steering hook is truly additive.
 | `--top-k` | `10` | How many tokens to show in the readout |
 | `--steering-method` | `actadd` | `actadd` (prompt-pair difference) or `token_diff` (two `W_U` columns) |
 | `--pos` / `--neg` | per-method (wedding-topic pair for `actadd`, `" spider"`/`" insect"` for `token_diff`) | A single token for `token_diff` (must be exactly one BPE token, or you get a clear error), a full prompt for `actadd` |
-| `--observe` | off | Print baseline generation + J-space readout only; skips steering entirely |
-| `--info` | off | Print the model's specs (layers, sizes, param count) and exit; no generation |
-| `--report [PATH]` | off | Write a self-contained HTML report after the sweep (default `report.html`). Sweep-only; ignored by `--observe`/`--info` |
+| `--observe` | off | **Standalone mode — run on its own.** Print baseline generation + J-space readout only; skips steering entirely |
+| `--info` | off | **Standalone mode — run on its own.** Print the model's specs (layers, sizes, param count) and exit; no generation |
+| `--report [PATH]` | off | **Add-on — append to a normal run.** Write a self-contained HTML report after the sweep (default `report.html`) and auto-open it in your browser. Sweep-only; ignored by `--observe`/`--info` |
+| `--no-open` | off | **Add-on — append alongside `--report`.** When a report is written, do NOT auto-open it in the browser |
+
+### Two kinds of flags — this trips people up
+
+Most flags above are **settings you combine on one steering run** (`--model`, `--prompt`,
+`--coefficient`, `--layer`, `--steering-method`, `--pos`/`--neg`, `--max-new-tokens`,
+`--top-k`). A few behave differently and are easy to misuse:
+
+**`--observe` and `--info` are standalone modes.** Run each on its own — it *replaces* the
+steering sweep, and steering flags are ignored. You don't append these to a normal run:
+
+```powershell
+# Just print the model's specs, then exit (no generation at all)
+python run_stage1.py --info --model gpt2
+
+# Just show the baseline generation + J-space readout (no steering)
+python run_stage1.py --observe --model gpt2 --prompt "My favourite sport is"
+```
+
+**`--report` and `--no-open` are add-ons.** Append them to a normal steering run — they don't
+run anything on their own:
+
+```powershell
+# Do the sweep, then also write + auto-open the HTML report
+python run_stage1.py --model gpt2 --coefficient 0 4 8 --report
+
+# Same, but don't pop open a browser tab
+python run_stage1.py --model gpt2 --coefficient 0 4 8 --report --no-open
+```
 
 `--device` is intentionally not a flag: this project is CPU-only by hardware constraint,
 hardcoded in `model_setup.py`.
@@ -103,4 +162,7 @@ hardcoded in `model_setup.py`.
 - `config.py` — `Config` dataclass + CLI parsing; single source of truth for defaults.
 - `model_setup.py` — loads the model, resolves the interception layer from its own config.
 - `steering.py` — logit-lens readout, both steering-vector builders, the injection hook.
+- `report.py` — builds the self-contained HTML report (and its Markdown export).
 - `run_stage1.py` — entry point: orchestrates baseline vs steered, prints results.
+- `CLAUDE.md` — project brief, three-stage plan, and research background.
+- `FINDINGS.md` — non-obvious behaviour learned from running the tool (read this early).

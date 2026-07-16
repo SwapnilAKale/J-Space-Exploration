@@ -1,3 +1,9 @@
+# Generated Stage 1 reports (overwritten every run -- not meant for version control).
+# These are per-run outputs; committing them just pushes your last run's result and
+# confuses anyone who clones the repo. Regenerate with `--report`.
+report.html
+report.md
+
 # Python virtual environment
 .venv/
 
