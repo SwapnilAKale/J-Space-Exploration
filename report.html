@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>J-space Stage 1 report -- gpt2</title>
+<style>
+body {
+  font-family: -apple-system, "Segoe UI", Arial, sans-serif;
+  margin: 2rem auto;
+  max-width: 1100px;
+  background: #fafafa;
+  color: #1a1a1a;
+}
+header {
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #333;
+}
+header h1 { margin: 0 0 0.75rem 0; }
+header dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.35rem 1rem;
+  margin: 0 0 1rem 0;
+}
+header dt { font-weight: bold; }
+header dd { margin: 0; font-family: "Consolas", monospace; }
+.generated-label {
+  font-weight: bold;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #555;
+  margin: 0.75rem 0 0.25rem 0;
+}
+pre {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 0.75rem;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: "Consolas", monospace;
+  margin: 0;
+}
+.coefficient-section { margin: 2.5rem 0; }
+.coefficient-section h2 {
+  background: #2b2b2b;
+  color: #fff;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  display: inline-block;
+}
+.layer-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+@media (max-width: 900px) {
+  .layer-grid { grid-template-columns: 1fr; }
+}
+.layer-cell {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 1rem;
+}
+.layer-cell h3 { margin: 0 0 0.5rem 0; }
+table.readout {
+  border-collapse: collapse;
+  font-family: "Consolas", monospace;
+  font-size: 0.85rem;
+  width: 100%;
+}
+table.readout th, table.readout td {
+  border: 1px solid #ccc;
+  padding: 0.2rem 0.5rem;
+  text-align: left;
+}
+table.readout th { background: #f0f0f0; }
+table.readout mark { background: #ffe066; padding: 0 2px; border-radius: 2px; }
+</style>
+</head>
+<body>
+<header>
+<h1>Stage 1 Report</h1>
+<dl>
+<dt>model</dt><dd>gpt2</dd>
+<dt>prompt</dt><dd>I went up to my friend and said</dd>
+<dt>steering</dt><dd>token_diff -- pos_token=&#x27; spider&#x27;  neg_token=&#x27; insect&#x27;</dd>
+</dl>
+<div class="generated-label">baseline generation</div>
+<pre>I went up to my friend and said, &quot;I&#x27;m going to go to the gym and do some cardio.&quot;</pre>
+</header>
+<section class="coefficient-section"><h2>Coefficient 0.0</h2><div class="layer-grid"><div class="layer-cell"><h3>Layer 4</h3><table class="readout"><thead><tr><th>#</th><th>baseline token</th><th>logit</th><th>steered token</th><th>logit</th></tr></thead><tbody><tr><td>0</td><td> goodbye</td><td>23.44</td><td> goodbye</td><td>23.44</td></tr>
+<tr><td>1</td><td> hello</td><td>18.28</td><td> hello</td><td>18.28</td></tr>
+<tr><td>2</td><td> that</td><td>17.83</td><td> that</td><td>17.83</td></tr>
+<tr><td>3</td><td> it</td><td>17.81</td><td> it</td><td>17.81</td></tr>
+<tr><td>4</td><td> about</td><td>17.32</td><td> about</td><td>17.32</td></tr>
+<tr><td>5</td><td> my</td><td>16.99</td><td> my</td><td>16.99</td></tr>
+<tr><td>6</td><td> nothing</td><td>16.56</td><td> nothing</td><td>16.56</td></tr>
+<tr><td>7</td><td> the</td><td>16.01</td><td> the</td><td>16.01</td></tr>
+<tr><td>8</td><td> a</td><td>15.95</td><td> a</td><td>15.95</td></tr>
+<tr><td>9</td><td>:</td><td>15.92</td><td>:</td><td>15.92</td></tr></tbody></table><div class="generated-label">steered generation</div><pre>I went up to my friend and said, &quot;I&#x27;m going to go to the gym and do some cardio.&quot;</pre></div>
+<div class="layer-cell"><h3>Layer 7</h3><table class="readout"><thead><tr><th>#</th><th>baseline token</th><th>logit</th><th>steered token</th><th>logit</th></tr></thead><tbody><tr><td>0</td><td> goodbye</td><td>28.86</td><td> goodbye</td><td>28.86</td></tr>
+<tr><td>1</td><td> hello</td><td>27.88</td><td> hello</td><td>27.88</td></tr>
+<tr><td>2</td><td> hi</td><td>23.53</td><td> hi</td><td>23.53</td></tr>
+<tr><td>3</td><td> bye</td><td>22.33</td><td> bye</td><td>22.33</td></tr>
+<tr><td>4</td><td> loudly</td><td>21.32</td><td> loudly</td><td>21.32</td></tr>
+<tr><td>5</td><td> aloud</td><td>20.74</td><td> aloud</td><td>20.74</td></tr>
+<tr><td>6</td><td> hey</td><td>20.24</td><td> hey</td><td>20.24</td></tr>
+<tr><td>7</td><td> my</td><td>20.24</td><td> my</td><td>20.24</td></tr>
+<tr><td>8</td><td> something</td><td>20.22</td><td> something</td><td>20.22</td></tr>
+<tr><td>9</td><td> that</td><td>20.20</td><td> that</td><td>20.20</td></tr></tbody></table><div class="generated-label">steered generation</div><pre>I went up to my friend and said, &quot;I&#x27;m going to go to the gym and do some cardio.&quot;</pre></div></div></section>
+<section class="coefficient-section"><h2>Coefficient 8.0</h2><div class="layer-grid"><div class="layer-cell"><h3>Layer 4</h3><table class="readout"><thead><tr><th>#</th><th>baseline token</th><th>logit</th><th>steered token</th><th>logit</th></tr></thead><tbody><tr><td>0</td><td> goodbye</td><td>23.44</td><td><mark> spider</mark></td><td>26.53</td></tr>
+<tr><td>1</td><td> hello</td><td>18.28</td><td> goodbye</td><td>23.49</td></tr>
+<tr><td>2</td><td> that</td><td>17.83</td><td> Spider</td><td>20.85</td></tr>
+<tr><td>3</td><td> it</td><td>17.81</td><td> spiders</td><td>20.84</td></tr>
+<tr><td>4</td><td> about</td><td>17.32</td><td> hello</td><td>19.12</td></tr>
+<tr><td>5</td><td> my</td><td>16.99</td><td> that</td><td>17.21</td></tr>
+<tr><td>6</td><td> nothing</td><td>16.56</td><td> Sponge</td><td>16.77</td></tr>
+<tr><td>7</td><td> the</td><td>16.01</td><td> Alexa</td><td>16.68</td></tr>
+<tr><td>8</td><td> a</td><td>15.95</td><td> it</td><td>16.39</td></tr>
+<tr><td>9</td><td>:</td><td>15.92</td><td>:</td><td>16.32</td></tr></tbody></table><div class="generated-label">steered generation</div><pre>I went up to my friend and said, &quot;I&#x27;m going to go up to my friend and I&#x27;m going</pre></div>
+<div class="layer-cell"><h3>Layer 7</h3><table class="readout"><thead><tr><th>#</th><th>baseline token</th><th>logit</th><th>steered token</th><th>logit</th></tr></thead><tbody><tr><td>0</td><td> goodbye</td><td>28.86</td><td> goodbye</td><td>29.00</td></tr>
+<tr><td>1</td><td> hello</td><td>27.88</td><td> hello</td><td>28.24</td></tr>
+<tr><td>2</td><td> hi</td><td>23.53</td><td> bye</td><td>23.61</td></tr>
+<tr><td>3</td><td> bye</td><td>22.33</td><td> hi</td><td>22.07</td></tr>
+<tr><td>4</td><td> loudly</td><td>21.32</td><td><mark> spider</mark></td><td>21.02</td></tr>
+<tr><td>5</td><td> aloud</td><td>20.74</td><td> congratulations</td><td>20.66</td></tr>
+<tr><td>6</td><td> hey</td><td>20.24</td><td> hey</td><td>20.63</td></tr>
+<tr><td>7</td><td> my</td><td>20.24</td><td> loudly</td><td>19.86</td></tr>
+<tr><td>8</td><td> something</td><td>20.22</td><td> that</td><td>19.82</td></tr>
+<tr><td>9</td><td> that</td><td>20.20</td><td>:</td><td>19.58</td></tr></tbody></table><div class="generated-label">steered generation</div><pre>I went up to my friend and said, &quot;I&#x27;m going to buy a new car.&quot;
+
+&quot;Oh</pre></div></div></section>
+</body>
+</html>

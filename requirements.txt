@@ -1,0 +1,23 @@
+# --- Install BEFORE this file, as its own command (CPU-only torch build) ---
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+# Plain `pip install torch` on Windows pulls CUDA runtime deps that are dead weight (and
+# irrelevant) on this Intel-UHD-only machine. Installing the CPU wheel first means
+# transformer_lens's own torch dependency is already satisfied and won't get overwritten
+# by a CUDA build.
+
+transformer_lens==2.18.0
+# Pinned to the newest 2.x release on purpose: TransformerLens 3.x deprecated the classic
+# HookedTransformer API (run_with_cache, model.unembed, model.ln_final, model.hooks(...))
+# in favor of a new TransformerBridge API. 2.18.0 is the last release built directly
+# against the API this project's scripts use, so we avoid the 3.x compatibility-layer risk.
+
+pyarrow==21.0.0
+# Pinned explicitly, not left to transformer_lens's own resolver. On this machine, Windows
+# Smart App Control (an Application Control policy, on since this install) blocks the
+# newest pyarrow wheel's native DLL as an unrecognized/low-reputation binary -- transitively
+# breaking `import transformer_lens` (it eagerly imports the `datasets` package, which
+# needs pyarrow, even though this project never loads a dataset). pyarrow==21.0.0 is old
+# enough to already be allowed by Smart App Control's reputation check, and new enough to
+# satisfy `datasets`'s own `pyarrow>=21.0.0` requirement. If Smart App Control blocks this
+# exact pyarrow build too on a different machine, try the next few point releases below the
+# `datasets` package's minimum-supported version until one is both allowed and compatible.
