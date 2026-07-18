@@ -244,6 +244,10 @@ honest written summary of whether intervention helped and by how much.
 - **Keep the working model swappable** via config, as described in section 3.
 - **Verify before claiming.** Every stage ends with a command I can run and an expected
   result. Don't mark a stage done until that command produces that result on this machine.
+- **Document new features in the README.** After implementing any new feature, flag, or
+  user-facing change, add or update its description in `README.md` — what it does and a short
+  example — so anyone who has the repo can see the full, current set of features without
+  having to read the code.
 - **Structure:** small, readable modules with a shared config; a `README.md` kept current
   with setup and run commands; a `requirements.txt` pinned to the Python 3.11/3.12 venv.
 

@@ -6,6 +6,8 @@ Background and the full three-stage plan: see [CLAUDE.md](CLAUDE.md). **New here
 setup, skim [FINDINGS.md](FINDINGS.md) — it explains the non-obvious behaviour (why the
 readout can disagree with the output, why Qwen sometimes prints Chinese, why the same
 coefficient behaves differently on different models) so you don't have to rediscover it.
+For copy-paste demos with the exact output to expect, see
+[VERIFIED_RUNS.md](VERIFIED_RUNS.md).
 
 Stage 1 only. CPU-only (no CUDA) — see [CLAUDE.md](CLAUDE.md) section 2 for hardware
 constraints.
@@ -154,6 +156,12 @@ python run_stage1.py --model gpt2 --coefficient 0 4 8 --report
 python run_stage1.py --model gpt2 --coefficient 0 4 8 --report --no-open
 ```
 
+The report opens in your browser as a self-contained HTML page: per coefficient, it shows each
+layer's baseline-vs-steered readout and steered generation side by side. It also has a
+**Download as Markdown** button that saves the whole report as a `report.md` file — preserving
+the exact output tokens (including odd characters like `|`, `_`, or CJK), so it's safe to paste
+into notes or GitHub.
+
 `--device` is intentionally not a flag: this project is CPU-only by hardware constraint,
 hardcoded in `model_setup.py`.
 
@@ -166,3 +174,4 @@ hardcoded in `model_setup.py`.
 - `run_stage1.py` — entry point: orchestrates baseline vs steered, prints results.
 - `CLAUDE.md` — project brief, three-stage plan, and research background.
 - `FINDINGS.md` — non-obvious behaviour learned from running the tool (read this early).
+- `VERIFIED_RUNS.md` — copy-paste demo commands with the exact results we got (gpt2 + Qwen sweet spots).

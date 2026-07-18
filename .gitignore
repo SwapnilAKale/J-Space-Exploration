@@ -7,6 +7,9 @@ report.md
 # Python virtual environment
 .venv/
 
+# Claude session summary data 
+.claude/
+
 # Python bytecode
 __pycache__/
 *.pyc
@@ -15,3 +18,4 @@ __pycache__/
 # OS / editor noise
 .DS_Store
 Thumbs.db
+
