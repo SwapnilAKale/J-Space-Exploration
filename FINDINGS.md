@@ -238,28 +238,24 @@ The cost: its larger-norm vector (see #16) breaks coherence sooner, so the windo
 appears AND the text stays coherent is narrow and sits at a low coefficient. To land a low-prior
 concept cleanly, use `actadd` and sweep *small* to find that window.
 
-## 18. Steer *away from wrong*, not *toward unknown-right* — and keep concept prompts general
+## 18. Build steering vectors from *general, portable* concept prompts, not target-specific ones
 
-*Where this came from:* a design realization (not a single run), while asking how steering would
-work on a real question whose answer we don't know in advance. This is really a Stage 2 principle,
-noted here so it isn't lost.
+For `actadd`, define the direction from a **general, portable concept** ("I love rugby", or a broad
+"sports" contrast), not a target-specific sentence ("My favourite sport is rugby"). A general concept
+vector can be applied to *any* prompt — including ones whose answer you don't know in advance — while a
+target-specific one only fits that single sentence and leans toward hardcoding the output. A portable
+vector carries a *concept*, not an *answer*, which is what you want for correcting a wrong drift rather
+than injecting a pre-decided target.
 
-In real use you usually don't know the correct answer — that's the whole reason you're asking the
-model. So you can rarely steer *toward* a known-correct target. But you can almost always recognize a
-*wrong* drift (a philosophy answer wandering into sports) and push *away* from it, because you know
-the wrong direction even when you don't know the right one. The realistic mode is **"correct the
-wrong direction," not "inject the right answer"** — and that's exactly what Stage 2's referee is
-meant to do.
-
-Practical consequence for `actadd` prompts: define a **general, portable concept** ("I love rugby",
-or a broad "sports" contrast), not a target-specific sentence ("My favourite sport is rugby"). A
-general concept vector can be applied to *any* prompt, including ones whose answer you don't know; a
-target-specific one only fits that one sentence and leans toward hardcoding the output.
+*How we saw it:* reasoning about steering a real question whose answer we don't know ahead of time —
+you can rarely steer *toward* a known-correct target, so the vector must carry a general concept. The
+target-specific `"My favourite sport is rugby"` pair read as more leading and performed worse than the
+general `"I love rugby"` pair (cf. the worksheet runs, #21).
 
 ## 19. The bigger picture: (how you build the direction) × (what you do with it)
 
-Every manipulation method is a combination of two independent choices. We currently use only two
-cells of this grid; the rest are the natural upgrades.
+Every manipulation method is a combination of two independent choices. We currently use two cells of
+this grid.
 
 **How you build the direction (where the vector comes from):**
 - `token_diff` — from `W_U` columns (the output matrix; never runs the model).
@@ -268,46 +264,25 @@ cells of this grid; the rest are the natural upgrades.
   single prompt pair carries (this is how the paper built its concept vectors).
 - SAE features — cleaner, more interpretable directions from a sparse autoencoder.
 - probe directions — the weight vector of a trained linear "is this concept present?" classifier.
-- J-lens vectors — the paper's directions, read through the Jacobian lens (the eventual upgrade over
-  our crude logit lens).
+- J-lens vectors — the paper's directions, read through the Jacobian lens (a cleaner lens than our
+  crude logit lens).
 
 **What you do with the direction:**
 - **add** — nudge *toward* it by a magnitude. Magnitude-fragile: too weak → the nearest strong
   neighbor wins (see #15), too strong → breaks (see #2). *(what we do now)*
 - **subtract** (negative add) — nudge *away* from it.
 - **ablate** — *remove* the concept entirely by projecting it out of the activation. There is **no
-  target**; the model falls back to its next-natural output. The honest tool for "steer away from
-  wrong" when you don't know the right answer (see #18).
+  target**; the model falls back to its next-natural output — the honest tool for removing a drift you
+  can recognize as wrong without knowing the right answer.
 - **swap** — *exchange* two concepts' presence surgically: hand the target the source's loading and
   leave everything orthogonal untouched. Installs a specific target cleanly — no magnitude gamble, no
   vacuum for a runner-up to fill. This is why the paper's rugby swap worked where our `add` defaulted
   to football (see #15).
 
-We currently occupy two cells: `token_diff`+add and `actadd`+add. The natural Stage 2 additions are
-**ablate** (remove an off-topic drift) and **swap** (install a known target), and eventually building
-directions from the real **J-lens** instead of the logit lens.
+We currently occupy two cells: `token_diff`+add and `actadd`+add; the other builders and operations
+above are the rest of the space, not yet used here.
 
-## 20. Stage 2 intervention rules (from reasoning about ablation)
-
-Design rules for the referee loop, worth writing down before we build it:
-
-- **Ablate when you know it's *wrong*; swap when you know what's *right*.** In real use you usually
-  don't know the correct answer, but you can spot an off-topic drift — so ablate it and let the model
-  recover (no target). When the correct concept *is* identifiable, swap it in surgically.
-- **Intervene early in the workspace band; never chase drift into the motor zone.** The last few
-  layers only *format* the output — they can't do the reasoning that would rescue a confused state.
-  Fix a drift at the *start* of the workspace (Qwen ~layer 17), where many layers remain to fold in
-  the correction. If it's still there at the motor layers, the output is already lost.
-- **Pair "ablate" with a positive on-topic nudge — don't leave a vacuum.** Ablation only removes; it
-  doesn't say where to go, so a removed concept can be replaced by *another* off-topic one
-  (whack-a-mole). A gentle push toward the correct context gives the model something to land on. (In
-  practice the prompt's own context is the strongest attractor, so a removed intrusion is usually
-  replaced by on-topic content — but that's a Stage 2 hypothesis to measure, not assume.)
-- **A single ablation isn't enough — the concept re-enters downstream.** Later layers re-derive a
-  concept you removed, so suppress it across the *band* of workspace layers (and at each generated
-  token), not at one point.
-
-## 21. Chat models run inside an invisible "chat template" — and feeding a bare string is itself a probe
+## 20. Chat models run inside an invisible "chat template" — and feeding a bare string is itself a probe
 
 Every instruction/chat-tuned model was fine-tuned to run inside a structured turn format built from
 special tokens — a **chat template**. For Qwen (and OpenAI's models) that format is **ChatML**: each
@@ -353,9 +328,9 @@ realising the tags are the invisible envelope real interfaces add, that base-com
 instruct model is both the root of the worksheet attractor *and* a useful probe, and that the format
 is one specific dialect (ChatML) among several, not a universal standard.
 
-## 22. The worksheet needs BOTH base-completion mode AND a worksheet-shaped stem — instruction phrasing escapes it
+## 21. The worksheet needs BOTH base-completion mode AND a worksheet-shaped stem — instruction phrasing escapes it
 
-Findings #13 and #21 pinned Qwen's Chinese fill-in-the-blank collapse on two things: an instruct
+Findings #13 and #20 pinned Qwen's Chinese fill-in-the-blank collapse on two things: an instruct
 model fed a bare string (off-distribution *base-completion* mode) plus lots of worksheet material in
 pretraining. This run isolates the trigger more sharply.
 
@@ -364,7 +339,7 @@ On the **same** bare-string, no-template Qwen, changing *only* the prompt — fr
 sentence."`) — made the worksheet **vanish**: clean rugby prose at the sweet spot. So the worksheet is
 **not** caused by base-completion mode alone. It needs base-completion mode **AND** a prompt shaped
 like a worksheet item. Break *either* lever and it's gone:
-- Remove base-completion mode → wrap the same message in ChatML (#21).
+- Remove base-completion mode → wrap the same message in ChatML (#20).
 - Remove the worksheet shape → phrase it as an instruction, not a `"___ is ___"` stem.
 
 These two escapes are independent, which is useful for Stage-1 probing: you can stay in bare-string
@@ -378,7 +353,7 @@ evidence for the "still base-completion" half: the bare-prompt baseline drifted 
 `Human: Can you provide me with more information...` turn — an instruct model with no template invents
 the next conversational turn.
 
-## 23. `actadd` over-steer drifts to the target's context-neighbors, not to gibberish
+## 22. `actadd` over-steer drifts to the target's context-neighbors, not to gibberish
 
 Finding #2 gave the floor / sweet-spot / ceiling shape; #17 noted `actadd` carries the target's
 *context* and breaks coherence sooner than `token_diff`. This refines what "breaks" actually looks
@@ -406,3 +381,94 @@ wrong). Practical tell: neighbor-drift means you're one notch too high — back 
 spot. (Aside: the sweet-spot answer's *specificity* also shifts with register — the bare instruction
 prompt says "Rugby...", the ChatML assistant prompt says "rugby union" — same clean win, the assistant
 register just gives a more specific answer.)
+
+## 23. The findings generalize beyond rugby — and the ceiling depends on concept loading AND layer
+
+Every earlier Qwen finding rested on rugby. Steering a completely different, *cross-domain* concept
+reproduces them: `actadd "I love pasta" − "I love basketball"` on the *sport* prompt "Name one sport
+you love, in a short sentence." cleanly makes Qwen answer with **food** — "I love pasta carbonara…"
+— at the same sweet spot (~0.4–0.6) across the whole 14–20 band. So the sweet-spot window, the
+band-wide robustness, and the failure modes are properties of the *method*, not of rugby.
+
+Two refinements surfaced:
+
+- **The floor is informative (extends #15).** At coeff 0.2, all three layers gave **tennis**, not
+  pasta. The push was strong enough to knock off the default (basketball) but too weak to install a
+  *cross-domain* target against the prompt's "name a sport" framing — so a runner-up *sport* filled
+  the slot (the #15 vacuum-fill, plus a prompt-vs-steer tug of war). Only above ~0.4 does the steer
+  override the prompt's framing and install pasta. So the floor isn't "no effect" — it's "strong
+  enough to displace, too weak to install," and what fills the gap is set by the prompt.
+- **The ceiling is concept- AND layer-dependent — it is not a single number (refines #2, #22).** At
+  coeff 1.2, layer 20 stayed clean ("My favorite is pasta-based dishes with a tomato-based sauce"),
+  layer 17 degraded (garbled "al d'occhio" + a spurious "– L. L." signature), and layer 14 collapsed
+  into a repetition loop. Two forces stack: (a) deeper layers tolerate higher coefficients (less
+  downstream room to amplify the push into drift/collapse), and (b) a *high-loading* concept resists
+  breaking far longer than a low-loading one — pasta (ubiquitous in training) stays coherent at
+  layer 20 @1.2 where low-prior *rugby* had garbled ("sealaft"). High-loading concept + deep layer
+  raises the effective ceiling.
+
+*How we saw it:* `actadd "I love pasta" − "I love basketball"`, prompt "Name one sport you love, in
+a short sentence.", layers 14/17/20, coeffs 0.2 / 0.4 / 0.6 / 1.2 / 1.5.
+
+## 24. Over-steer "negative tone" is an illusion — craving idioms + repetition, not sentiment
+
+Pushed past the sweet spot, the pasta steer produced "I can **not** resist," "I can**not** recommend
+enough," which *reads* as negative but isn't. Those are **craving idioms** — negation-shaped but
+positive in meaning ("can't resist," "can't get enough"). Over-amplifying the "I love X" affect makes
+the model reach for the strongest idioms of desire it knows, and English builds those out of "can't."
+
+Two things compound the bleak *reading*: past the coherence ceiling, greedy decoding loops (#2, #8),
+so it repeats "I can not… I can not…"; and the context cloud over-expresses into obscure specifics
+(Italian dish names — the #22 drift). None of that is a sentiment flip.
+
+Caution: **do not read tone or sentiment into over-steer output.** Apparent negativity at high
+coefficient is broken enthusiasm (craving "can't" idioms) + repetition + drift. Judge past-ceiling
+output as *breakage*; if you care about sentiment, read it off a coherent sweet-spot output, never a
+broken one.
+
+*How we saw it:* pasta `actadd` at coeff 1.2–1.5 on layers 14/17 — "I can not resist…" looping,
+plus "al d'occhio" / "withon" garble.
+
+## 25. Concept "loading" strongly changes steering tolerance — the gap is large
+
+Finding #15 said workspace *loading* (how strongly a concept is already present) predicts swap
+success. Running the same method/model/layers on a **low-loading** concept (rugby) vs a
+**high-loading** one (pasta) shows loading also sets the **coherence ceiling** — and the gap is big,
+not subtle:
+
+- **Rugby (low-loading, niche in training):** garbled by layer 20 @1.2 ("rugby sealaft"); coherent
+  window roughly ~0.6, breaking by ~0.9–1.2.
+- **Pasta (high-loading, ubiquitous in training):** still clean at layer 20 @1.2 ("My favorite is
+  pasta-based dishes with a tomato-based sauce"), and in ChatML mode stayed largely coherent at 1.2
+  across *all* of layers 14/17/20. Coherent window stretches to ~1.2 — roughly **double** rugby's.
+
+Why: a concept the model already represents strongly sits "higher" in the workspace to begin with, so
+strengthening it is a *small* perturbation of the model's natural state — it takes far more push to
+drive past coherence. A low-loading target must be forced in against a weak prior, so it breaks the
+manifold sooner (this is also why `token_diff` toward rugby defaulted to football, #15).
+
+Practical consequences: (1) there is no single "safe coefficient" even for one model *and* layer —
+re-map per concept, and expect a common concept to tolerate on the order of twice the coefficient of
+a niche one; (2) if a target resists because it's low-loading, do **not** just crank the coefficient —
+it breaks coherence before it lands. That resistant, low-loading case is exactly what the surgical
+swap / J-lens is built for (#15, #19).
+
+*How we saw it:* matched `actadd` coeff sweeps for pasta vs rugby on Qwen at layers 14/17/20 — pasta
+stayed clean at (layer, coeff) pairs where rugby had already garbled.
+
+## 26. A chat-formatted prompt survives more steering than a raw prompt
+
+When you wrap the prompt in the model's chat format (ChatML) instead of feeding it as plain text, you
+can push the steering coefficient noticeably higher before the answer falls apart.
+
+The simplest way to picture it is **footing**. The model spent its whole training practicing one
+thing over and over: answering as "the assistant" inside the chat format. That format is its home
+turf — it stands on solid ground there, sure of what it's doing. A raw, un-wrapped prompt is a
+situation it saw far less of, so it's already a little unsteady before you touch it. Steering is a
+shove: shove someone standing firmly and they lean but stay upright; shove someone already off-balance
+and they topple. So the same coefficient that breaks a raw prompt gets absorbed by a chat-formatted
+one.
+
+*How we saw it:* at coeff 1.2 the raw pasta prompt collapsed into an "I can not resist…" repetition
+loop at layer 14, while the identical steer inside ChatML stayed a mostly-coherent sentence; the same
+pattern held for rugby. (See #20 for what the chat format actually is.)

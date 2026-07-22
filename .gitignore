@@ -7,8 +7,11 @@ report.md
 # Python virtual environment
 .venv/
 
-# Claude session summary data 
+# Claude session summary data
 .claude/
+
+# Private working notes (editable working docs kept out of the guarded .claude/ folder)
+notes/
 
 # Python bytecode
 __pycache__/
@@ -19,3 +22,4 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
+notes/
