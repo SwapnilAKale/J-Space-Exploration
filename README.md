@@ -9,8 +9,8 @@ coefficient behaves differently on different models) so you don't have to redisc
 For copy-paste demos with the exact output to expect, see
 [VERIFIED_RUNS.md](VERIFIED_RUNS.md).
 
-Stage 1 only. CPU-only (no CUDA) — see [CLAUDE.md](CLAUDE.md) section 2 for hardware
-constraints.
+Stage 1, plus the search harness (`run_search.py`) that runs Stage 1 experiments in bulk.
+CPU-only (no CUDA) — see [CLAUDE.md](CLAUDE.md) section 2 for hardware constraints.
 
 ## Setup (Windows, PowerShell)
 
@@ -165,6 +165,120 @@ into notes or GitHub.
 `--device` is intentionally not a flag: this project is CPU-only by hardware constraint,
 hardcoded in `model_setup.py`.
 
+## Running a search (`run_search.py`)
+
+`run_stage1.py` runs one experiment per typed command, and each command reloads the model —
+on CPU with Qwen that load is most of the wall-clock time. `run_search.py` is the **runner**
+for the same experiment: it loads the model **once**, walks a whole grid of
+`(layer, coefficient)` pairs, scores each trial automatically, and writes both a machine log
+and a readable report.
+
+It adds **no new steering capability**. It imports the same `steering.py` and the same
+generation call `run_stage1.py` uses, so on identical inputs the two produce byte-identical
+text (greedy decoding is deterministic). `run_stage1.py` is unchanged and remains the manual
+tool.
+
+```powershell
+# A quick grid on gpt2: 2 layers x 3 coefficients = 6 trials, one model load
+python run_search.py --model gpt2 --prompt "My favourite sport is" --steering-method token_diff --pos " rugby" --neg " football" --layer 4 7 --coefficient 0 4 8 --target-concept rugby
+
+# Several cases from a task file (see example_spec.json), still one model load
+python run_search.py --spec example_spec.json
+
+# With ground truth: score the answer, not just the presence of a word
+python run_search.py --model Qwen/Qwen2.5-1.5B-Instruct --prompt "<|im_start|>user`nWhat is 7 times 8?<|im_end|>`n<|im_start|>assistant`n" --steering-method actadd --pos "7 times 8 is 20" --neg "7 times 8 is 56" --layer 14 --coefficient 0.4 0.6 0.8 0.9 0.95 1.0 1.2 --expected-answer 56 --target-concept 20
+```
+
+### What it writes
+
+- **`search_log.jsonl` — the source of truth.** One JSON object per trial, **appended across
+  every run** (never overwritten). Carries the full output text, both readouts with logits,
+  the norms, every metric, and the config that produced it. The harness reads this file back,
+  which is where resume comes from: a `(layer, coefficient)` pair that is already logged is
+  **not regenerated** — the logged result is reused and marked `cached` in the report. Pass
+  `--rerun` to force fresh generation.
+- **`search_runs/search_report_<run_id>.md` — the reading document.** One per run, generated
+  from the JSONL, never parsed by anything. Run header → summary table of short safe fields →
+  **every trial's complete output verbatim in a fenced code block** with its metrics and a
+  one-line top-3 readout → a "flagged for human review" section. If all you care about is
+  what the model actually said, this file is enough on its own.
+
+### How trials are scored
+
+Several independent metrics, deliberately **never collapsed into one number** — they
+disagree, and the disagreement is the information:
+
+| Metric | What it means |
+|---|---|
+| `answer_extracted` | The number after the last `=`, else after the last `is`, else the last number. The answer is **parsed, not grepped for** |
+| `answer_correct` | Compared against `--expected-answer`. `null` when there is no expected answer, or when nothing parsed — `null` means *not judged*, never *wrong* |
+| `target_present` | Substring check for `--target-concept`. A deliberately **weak** signal: every failure in `FINDINGS.md` #32 contains its target |
+| `operands_altered` | The output computes on operands the prompt never gave (`7 x 10` for a `7 x 8` prompt) — the `FINDINGS.md` #31 failure mode |
+| `repetition_score`, `max_repeat_run` | Degeneracy, two ways: diffuse trigram repetition, and the longest back-to-back loop |
+| `target_rank_in_readout` | Where the target sits in the steered top-k readout |
+| `needs_human_review` | Set when the metrics **disagree**, or when there is no ground truth. Comes with the reasons |
+
+Metrics are computed on the **generated continuation only** (the echoed prompt is stripped
+first), while the log and report keep the full output text.
+
+**No ground truth is a supported case, not an error.** Style, mood and cross-lingual probes
+have no correct answer: those trials get `null` correctness fields, keep the metrics that do
+apply (repetition, readout, norms), and are flagged for your judgement. The harness's
+contribution there is execution and logging, not judgement.
+
+Every run also prints `‖vec‖`, `‖resid‖` and their ratio per layer — the scale-free numbers
+behind `FINDINGS.md` #1 (why an `actadd` window is roughly layer-invariant) and #30 (readout
+saturation when the injection swamps the residual).
+
+`python search_scoring.py` runs the scorer's self-check against real outputs from
+`FINDINGS.md` — no model load, about a second.
+
+### Task spec format
+
+A spec runs several cases against **one** model in a single process. `defaults` are merged
+under each case; per-case keys win. Any unknown key is a hard error rather than a silent
+default. See `example_spec.json`:
+
+```json
+{
+  "model": "gpt2",
+  "defaults": { "layers": [4, 7], "coefficients": [0, 4, 8], "max_new_tokens": 20 },
+  "cases": [
+    {
+      "name": "rugby_token_diff",
+      "prompt": "My favourite sport is",
+      "steering_method": "token_diff",
+      "pos": " rugby",
+      "neg": " football",
+      "target_concept": "rugby",
+      "expected_answer": null,
+      "notes": "free text, copied into the log and report"
+    }
+  ]
+}
+```
+
+### `run_search.py` flags
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--spec PATH` | none | JSON task file with one or more cases. Without it, the flags below define a single ad-hoc case |
+| `--model` | `gpt2` | TransformerLens model name. Overrides a spec's own `model` |
+| `--prompt` | *(required without `--spec`)* | The prompt to run |
+| `--layer` / `--coefficient` | auto layer, `0 4 8 16` | The grid to sweep. Same meaning as in `run_stage1.py` |
+| `--steering-method`, `--pos`, `--neg` | `actadd`, per-method defaults | Same as `run_stage1.py` |
+| `--max-new-tokens` / `--top-k` | `30` / `10` | Same as `run_stage1.py` |
+| `--expected-answer` | none | Ground truth for this case. Omit when there is none — correctness is then `null`, never guessed |
+| `--target-concept` | none | The concept steered toward, for `target_present` and the readout rank |
+| `--case-name` | `cli` | Label for this case in the log and report |
+| `--normalize` | **off** | Unit-normalize the steering vector before scaling. Off by default: every coefficient in `FINDINGS.md` was measured un-normalized, so normalizing changes what a coefficient *means* |
+| `--rerun` | off | Regenerate trials already in the log instead of reusing them |
+| `--log PATH` | `search_log.jsonl` | The accumulating JSONL log (appended, never overwritten) |
+| `--out-dir DIR` | `search_runs` | Where the per-run Markdown report goes |
+
+**Not in this step (it is step 2b):** adaptive / coarse-to-fine search, drill-down between
+brackets, and any referee LLM. You hand `run_search.py` the grid; it runs the grid.
+
 ## Files
 
 - `config.py` — `Config` dataclass + CLI parsing; single source of truth for defaults.
@@ -172,6 +286,12 @@ hardcoded in `model_setup.py`.
 - `steering.py` — logit-lens readout, both steering-vector builders, the injection hook.
 - `report.py` — builds the self-contained HTML report (and its Markdown export).
 - `run_stage1.py` — entry point: orchestrates baseline vs steered, prints results.
+- `run_search.py` — entry point: runs a whole `(layer, coefficient)` grid on one model load.
+- `search_spec.py` — task-spec dataclass, JSON loader, and the search CLI.
+- `search_scoring.py` — the automatic metrics (`python search_scoring.py` self-checks them).
+- `search_log.py` — append-safe JSONL log, and reading it back for resume.
+- `search_report.py` — builds the per-run Markdown search report.
+- `example_spec.json` — a runnable two-case task spec.
 - `CLAUDE.md` — project brief, three-stage plan, and research background.
 - `FINDINGS.md` — non-obvious behaviour learned from running the tool (read this early).
 - `VERIFIED_RUNS.md` — copy-paste demo commands with the exact results we got (gpt2 + Qwen sweet spots).

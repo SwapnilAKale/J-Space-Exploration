@@ -4,6 +4,12 @@
 report.html
 report.md
 
+# Search-harness run artifacts (run_search.py). The JSONL accumulates across every run on
+# this machine and the reports are one per run -- both are local lab records, not source.
+# Findings worth keeping get promoted by hand into FINDINGS.md / VERIFIED_RUNS.md.
+search_log.jsonl
+search_runs/
+
 # Python virtual environment
 .venv/
 

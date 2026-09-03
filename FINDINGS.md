@@ -146,6 +146,11 @@ meaningless underscore/filler tokens. This is a known limitation, and it's exact
 research's **Jacobian lens** was built to fix. Until that lens is wired in, **judge Qwen's
 middle-layer runs by the generated text, not the readout.**
 
+**Amendment (see #36):** this blindness turned out to be **content-dependent, not layer-intrinsic.**
+Given a *semantically clean* steering vector, the same Qwen middle layers read perfectly legibly. The
+filler-token readouts above are what a noisy or weakly-loaded residual looks like — not a hard ceiling
+of the logit lens on this model.
+
 The warning `you are not using LayerNorm, so the writing weights can't be centered! Skipping` on
 Qwen is **harmless and expected** — Qwen uses RMSNorm by design; you cannot and should not switch it
 to LayerNorm, and it does not degrade the output (the coherent baseline proves that).
@@ -472,3 +477,370 @@ one.
 *How we saw it:* at coeff 1.2 the raw pasta prompt collapsed into an "I can not resist…" repetition
 loop at layer 14, while the identical steer inside ChatML stayed a mostly-coherent sentence; the same
 pattern held for rugby. (See #20 for what the chat format actually is.)
+
+## 27. `actadd` needs a *context-matched* pos/neg pair — a bare token pair builds a destructive noise direction
+
+`actadd` builds its direction by *running the model* on both prompts and differencing the residual
+(#5). That means the difference only isolates a concept if everything *except* the concept is shared.
+Feed it two bare, contextless strings and you difference two complete representations of "a naked token
+sitting alone" — which is not a concept direction at all, and injecting it into a real prompt's very
+different internal state is an off-manifold shove. **For `actadd`, the two prompts must be identical
+except for the one concept; a bare token pair is a misuse of the method** (that case is `token_diff`'s
+job, which reads `W_U` columns and needs no context).
+
+The tell that the vector is noise rather than a concept is the **readout**: it decodes to semantically
+unrelated junk instead of anything resembling the intended concept.
+
+*How we saw it:* the same target ("make it answer 20") built two ways on Qwen, ChatML prompt
+`"What is 7 times 8?"`, layers 14/17/20, coeff 0.4/0.6/1.2.
+- **Bare pair** `--pos "20" --neg "15"`: destroyed the output at **every** layer and coefficient
+  (`}%}%}%…` at 0.4–0.6, `limp limp limp…` at 1.2). The readout was pure noise — `' limp'`, `'不行'`,
+  `' Gorgeous'`, `' strugg'`, `'Serializable'`, `' goofy'`, `' crappy'` — nothing numeric, nothing
+  about the concept.
+- **Context-matched pair** `--pos "7 times 8 is 20" --neg "7 times 8 is 56"` (differing in one token):
+  graded, interpretable behaviour at every layer, a legible on-topic readout, and a visible
+  floor/sweet-spot/ceiling. Same model, same prompt, same layers, same coefficients — the *only*
+  change was how the pair was written.
+
+## 28. A confident fact is easy to *break* but hard to *replace* with a chosen target
+
+Steering a factual answer is not one capability but two, and they have very different difficulty:
+**evicting the incumbent answer is easy; installing a specific chosen answer is hard.** A high-prior,
+confidently-held fact does **not** resist being knocked over — but the vacuum it leaves is filled by
+whatever is nearest in the model's own priors, not by the target you aimed at.
+
+This is #15's eviction/vacuum-fill mechanism reproduced in a completely different domain (arithmetic
+rather than sports), which generalizes it: `add` at a *coherent* strength clears the slot, and a
+low-prior target cannot win the empty slot. Installing a specific low-prior answer is the case that
+needs the surgical **swap**, not `add` (#15, #19).
+
+*How we saw it:* Qwen, ChatML `"What is 7 times 8?"` (baseline `"7 times 8 is 56."`), `actadd`
+`"7 times 8 is 20"` − `"7 times 8 is 56"`, layers 14/17/20, coeff 0.4/0.6/1.2. The fact fell over at
+coeff 0.4–0.6 on all three layers — but **never landed on the target 20**:
+
+| layer | 0.4 | 0.6 | 1.2 |
+|---|---|---|---|
+| 14 | "…is **56**." (correct; phrasing changed) | "…is **17**." | broken (`"12 is 20 and 2 is 2…"`) |
+| 17 | "…is **168**." | "7 × 8 = **160**" | broken (`"2022-2122-0222…"`) |
+| 20 | "…is **16**." | "…is **16**." | "100" |
+
+The floor is also visible: layer 14 @0.4 kept the answer **correct** but changed the phrasing ("The
+product of 7 times 8 is 56" vs the baseline "7 times 8 is 56") — strong enough to perturb, too weak to
+displace the fact.
+
+## 29. Steering a factual slot can induce a *coherent, confidently wrong* answer — and it moves the reasoning frame, not just the content
+
+Past the floor, a steered factual prompt does not necessarily degrade into repetition or garble (#2).
+It can instead produce a **fluent, well-formatted, confidently wrong** answer — an induced
+confabulation. The steer also visibly shifted the model's *frame* (into "this is a calculation, show
+the operation"), not merely the numeral, which is why the wrong answer came out looking reasoned.
+
+Two consequences worth keeping:
+- **Judging steered output by fluency is unsafe.** Coherent no longer implies uninjured; here the most
+  *readable* output in the whole grid was also wrong.
+- **The workspace holds the reasoning frame, not the arithmetic.** What moved was "calculation-ness,"
+  which is a concept the middle layers evidently represent. This is the more promising lever for
+  reasoning tasks than pointing a vector at a numeral (cf. #9: steering redirects content, it does not
+  upgrade capability).
+
+*How we saw it:* same run as #28, layer 17 @0.6 —
+`"To find the product of 7 and 8, you can use the multiplication operation:\n7 × 8 = 160"`. Fluent,
+pedagogically formatted, and wrong. The layer-17 steered readout at 0.4–0.6 was a clean on-topic
+cluster — `'计算'`, `'calculate'`, `'Calculate'`, `' Calcul'`, `'calcul'`, `'Compute'` — versus the
+junk baseline readout at the same layer (`'<|endoftext|>'`, `'您好'`, `'Sorry'`). Layer 20's steered
+readout likewise turned evaluative: `'Correct'`, `'Answer'`, `'Incorrect'`. *One observation — worth a
+repeat run before leaning on the "frame is steerable" reading.*
+
+## 30. When the injected vector dominates the residual, the readout saturates and stops responding to the coefficient
+
+If `coefficient * vector` is large compared with the residual at that layer, then
+`resid + c·vec ≈ c·vec` — and because the readout normalizes before unembedding, the `c` divides back
+out. The readout then decodes essentially the *steering vector's own direction*, so raising the
+coefficient stops changing it. **A steered readout that barely moves across a large coefficient range
+is a diagnostic that the vector is swamping the residual, not that the coefficient is doing nothing.**
+
+Note this also means the readout can saturate while the *generated text* still changes with the
+coefficient — the readout is one mid-layer snapshot, the output is decided later (#3).
+
+*How we saw it:* the bare-pair run in #27 (Qwen, layers 14/17/20). Across a **3× coefficient change**
+(0.4 → 1.2) the steered top-10 was identical at every layer and the top logit moved only
+`11.15 → 11.16 → 11.16` — while the generated text still changed (`}%}%}%…` at 0.4–0.6 versus
+`limp limp…` at 1.2). The same plateau appeared in the context-matched run at layer 20, where 0.4 and
+0.6 produced the identical output ("7 times 8 is 16."). *Suggestive evidence that only the residual's
+direction survives normalization; the clean confirmation is still the pending norm printout
+(`‖vec‖ / ‖resid‖` per layer).*
+
+## 31. Steering injects a concept but not its *role* — the target got used as an operand, and the arithmetic stayed correct
+
+Steering a numeric concept into a math prompt did not corrupt the model's *computation*. It corrupted
+the model's *input to* that computation: the injected number was slotted in as an **operand**, and the
+model then multiplied **correctly**. The multiplication circuit was intact throughout.
+
+Two consequences:
+- **Steering perturbs the representations a computation runs on, not the computation itself.** This
+  sharpens #9 ("redirects content, does not upgrade capability"): it doesn't *downgrade* capability
+  either — a wrong answer here is a right calculation on wrong inputs.
+- **The mechanism carries no notion of *which slot* the concept should fill.** We pushed "20-ness"
+  into the residual; the model decided where 20 belonged and chose "operand" rather than "answer".
+  Nothing in `resid + c·vec` says "this is the *result*". That is a precision limit no amount of
+  coefficient tuning fixes, and it is a distinct problem from the magnitude problem (#2).
+
+*How we saw it:* Qwen, ChatML `"What is 7 times 8?"`, `actadd` toward `"…is 20"`, several layers and
+coefficients. The wrong answers are exact products of a substituted operand:
+
+| output | reading |
+|---|---|
+| `7 × 8 = 160` (layer 17 @0.6) | **160 = 8 × 20** |
+| `7 times 8 is 140` (layer 20 @0.4, @0.6) | **140 = 7 × 20** |
+| `7 × 8 = 70` (layer 17 @0.6) | **70 = 7 × 10** |
+| `7 × 10 = 20` (layers 17/20 @1.2) | operand rewritten outright to accommodate the target |
+
+140 and 160 are arithmetically correct products — of operands the model was steered into using.
+
+## 32. `add` cannot install a low-prior target: the coherent window and the target-present window do not overlap
+
+Sweeping the coefficient finely shows the two conditions for success are **mutually exclusive** for a
+low-prior target. Where the output is still coherent, the target is absent; by the time the target
+appears, the output has already degenerated. There is no intermediate coefficient that gets both, so
+this is **not** a tuning problem — it is a structural limit of `add`.
+
+This confirms #15's prediction ("the coherent window is too weak for the target; the target-strong
+window is incoherent") at fine resolution and in a new domain, and it is the empirical justification
+for building the surgical **swap** (#19) rather than continuing to tune `add`.
+
+The misses are also informative: they cluster **numerically around** the target (17, 19, 27 for a
+target of 20) rather than being arbitrary. That is #23's neighbor-drift reproduced in *numeric* space —
+the steer moves the answer into the target's representational neighbourhood, then lands on a neighbour.
+
+*How we saw it:* Qwen, ChatML `"What is 7 times 8?"`, `actadd` `"7 times 8 is 20"` − `"7 times 8 is 56"`,
+layer 14, swept 0.4 → 1.2 (including 0.95):
+
+| coeff | 0.4 | 0.6–0.8 | 0.9 | 0.95 | 1.0 | 1.1 | 1.2 |
+|---|---|---|---|---|---|---|---|
+| output | "…is 56" (correct) | "…is **17**" | "…is 27." ×2 (looping) | "**19**" | "19 is 19. 19 is 20…" | "12 is 20 and 2 is 2…" | broken |
+
+The target token `20` first appears at 1.0 — and only inside a repetition loop. Every coherent output
+in the sweep has a non-target number.
+
+## 33. Perturbing the answer-identity axis induces a step-by-step "breakdown" frame — in either polarity, dose-dependently
+
+Steering along the "which answer is it" axis reliably flips the model out of its terse baseline reply
+("7 times 8 is 56.") into an **explanatory, worked-through** register ("To find the product of 7 and 8,
+you can use the multiplication method: 1. …"). The effect does **not** depend on the direction of the
+steer — pushing toward a wrong answer and pushing toward the correct one both produce it — which
+suggests it is driven by *perturbation of that axis*, not by the content of the target. It also scales
+with the coefficient: more push, more elaborate the breakdown.
+
+So the reasoning/explanatory **frame** is a thing the middle layers hold and that steering can move
+(cf. #29), independent of whether the *answer* moves.
+
+*How we saw it:* Qwen, ChatML `"What is 7 times 8?"`, `--max-new-tokens 150`. All three pairs induced
+the frame: `20`−`38`, `20`−`56`, and the reversed `56`−`20`. Dose dependence at layer 17 with the
+reversed (correct-answer) pair: @0.4 → one method in LaTeX; @0.6 → *two* methods, including a rendered
+long-multiplication layout. At layer 14 the same reversed pair produced output byte-identical to the
+baseline — i.e. it sat below the floor there, so the frame shift is also strength-dependent, not purely
+a property of the layer.
+
+*Caveat:* the pairs were not norm-matched, so a coefficient of 0.4 is not the same physical push across
+them; the pending norm printout would separate a genuine semantic difference from a scale artifact.
+
+## 34. The induced reasoning frame does NOT confer arithmetic correctness (negative result)
+
+Getting the model to "show its work" — via #33's frame shift — **did not make it right.** Given enough
+tokens to actually finish, the worked-through outputs reach confidently wrong answers. The scaffolding
+is real; the reliable execution underneath it is not. At this model size, procedure availability and
+arithmetic reliability are separate things.
+
+This matters because the opposite is an easy assumption to make ("make it reason → it gets it right"),
+and it would have sent Stage 3 down a dead end. Steering the *strategy* is reachable (#33); it does not
+follow that the strategy delivers a correct result.
+
+**Design consequence, learned the hard way:** you cannot demonstrate that an intervention *improves*
+accuracy on a problem the baseline already answers correctly. `7 × 8` has no headroom — steering toward
+the correct answer produced correct answers, but the baseline was already correct, so that run shows
+*preservation plus elaboration*, not improvement. Any real improvement test needs problems the model
+**fails** at baseline.
+
+*How we saw it:* Qwen, ChatML `"What is 7 times 8?"`, `actadd` `"…is 20"` − `"…is 38"`,
+`--max-new-tokens 150` (the earlier 30-token runs were truncated before reaching any answer):
+- layer 14 @0.4 → "2. Multiply the numbers: 7 × 8 = **48**. So, 7 times 8 equals 48."
+- layer 14 @0.6 → an elaborate place-value ritual with multiple wrong sub-products (7×5=25, 7×6=15,
+  7×8=14), then incoherent addition.
+- layer 17 @0.6 → "7 × 8 = **70**."
+- layer 17 @0.4 → the most instructive one:
+  `7 × 8 = 7 × (5 + 3) = (7 × 5) + (7 × 3) = 35 + 21 = 55`
+  — correct *method* (distributive decomposition), both sub-products correct (35 ✓, 21 ✓), and then the
+  final addition dropped by one (35 + 21 = 56). It reasoned to within one operation of the right answer
+  and fumbled the last step.
+
+## 35. A minimally-contrastive pos/neg pair buys concept *purity*, not window *width*
+
+#27 established that `actadd` needs a context-matched pair. The natural follow-on prediction was that
+fixing a badly-matched pair would also **widen** the coherent window. **It does not.** Replacing a
+negative prompt that shared almost nothing with the positive one with a minimally-contrastive negative
+(same length, same structure, differing only in the concept) left the window boundaries exactly where
+they were.
+
+What it changed instead was the **semantic cleanliness of the vector**, visible immediately in the
+readout (#36). So minimal contrast and the coherence ceiling are **independent axes**: matching the pair
+strips incidental content out of the direction; it does not make the model tolerate a bigger push.
+
+*How we saw it:* Qwen, ChatML `"What is 7 times 8?"`, `--max-new-tokens 150`, layers 14/17,
+coeff 0.4/0.6/0.9.
+- Old pair `"Let me work through this step by step"` − `"The answer is"` (shares nothing): readout vague
+  and off-concept — `'example'`, `'to'`, `'Int'`, `'cos'`, `'做起'`.
+- New pair, same positive, negative `"Let me answer this immediately"` (minimal contrast): readout became
+  a clean cluster of operation words (#36).
+- **Window identical in both cases** — 0.4 works, 0.6 degenerates, 0.9 collapses, at both layers.
+- Accuracy at the sweet spot was a wash, not a win: better at layer 14 (56 correct, plus a correct 7×
+  table: 7, 14, 21, 28, 35, 42), worse at layer 17 (63).
+
+*(Recorded because the prediction failed — we expected the window to widen and it did not.)*
+
+## 36. With a clean concept vector, Qwen's middle-layer readout IS legible — and it predicts the behaviour
+
+#11 recorded the logit-lens readout as mostly meaningless filler at Qwen's middle layers. That is
+**content-dependent, not layer-intrinsic.** Given a semantically clean steering vector, the *same*
+layer-17 readout becomes sharply legible — and what it shows **predicts what the model then does**.
+
+This matters twice over. It makes the readout usable as a **predictor**, not merely a post-hoc
+diagnostic — which is exactly what a referee reading the decoded token list would depend on. And it
+removes the urgency from the J-lens upgrade: the logit lens is not as blind on this model as #11
+concluded, so it remains a usable instrument (and the control against which a future J-lens would be
+judged).
+
+*How we saw it:* the minimally-contrastive strategy pair from #35, layer 17. Steered readout:
+`' Divide'`, `' Multiply'`, `' Subtract'`, `'Multiply'`, `' Addition'`, `' subtraction'`, `'divide'` — a
+coherent cluster of arithmetic **operation** words, against a baseline readout of `'<|endoftext|>'`,
+`'您好'`, `'计算'`, `'Sorry'`. Layer 14 gave `' Decom'`, `' decomposition'`, `' Intermediate'`,
+`' Extract'`, `' Step'`, and at higher coefficients the Chinese equivalents `'分解'` (decompose) and
+`'一步步'` / `'一步一步'` (step by step).
+
+The generated text then did exactly what the readout advertised — decomposition into operations:
+`7 × 8 = (7 × 10) − (7 × 1)` at coeff 0.4, and `7 × 8 = (5 + 2) × 8` with `5 × 8 = 5 × (4 + 1)` at 0.6.
+
+## 37. This model's individual operations are reliable — its setup and bookkeeping are what fail
+
+Across three independent runs, with three different steering vectors, every wrong arithmetic answer
+decomposed the same way: the individual multiplications and additions were **correct**, and the error
+was in *what was being computed* — the operands, the identity, or the running total.
+
+So a wrong answer from this model is rarely a broken calculation. It is a **correct calculation of the
+wrong thing.** Consequence for Stage 3: an intervention meant to improve arithmetic should target
+**setup and bookkeeping**, not computation — and #34 already showed that simply inducing more reasoning
+does not supply that.
+
+*How we saw it:* three separate instances, all on Qwen with ChatML `"What is 7 times 8?"` —
+- `140 = 7 × 20` and `160 = 8 × 20` (#31) — exact products of a *substituted operand*.
+- `7 × 8 = 7 × (5 + 3) = (7 × 5) + (7 × 3) = 35 + 21 = 55` (#34) — correct method, correct sub-products
+  (35 ✓, 21 ✓), final addition off by one.
+- `7 × 8 = (7 × 10) − (7 × 1) = 70 − 7 = 63` — the arithmetic is correct (70 − 7 = 63 ✓); the *identity*
+  is wrong, it should be `(7 × 10) − (7 × 2)`. It effectively computed 7 × 9. In the same run:
+  `7 = 5 + 2` ✓, distribute ✓, `5 × 4 = 40` ✓, `5 × 1 = 5` ✓ — then `5 + 5 = 10`, where the bookkeeping
+  called for `40 + 5 = 45`.
+
+## 38. A coefficient means nothing on its own — the portable quantity is the injection's size relative to the residual
+
+A steering coefficient is not a property of the steer; it is a number whose meaning depends on the
+vector it scales and the residual stream it is added into. The quantity that actually governs
+behaviour is the **effective ratio**:
+
+`effective_ratio = coefficient × ‖steering_vector‖ / ‖resid‖`
+
+Measured for the first time on the layer-14 `actadd` sweep, this turns #32's coefficient window into
+an instrument-independent ladder. The vector's norm was **43.41** against a residual norm of
+**50.32** (ratio 0.863), so:
+
+| coeff | effective ratio | what came out |
+|---|---|---|
+| 0.4 | **0.35** | `"The product of 7 times 8 is 56."` — correct, phrasing perturbed |
+| 0.6–0.8 | 0.52–0.69 | `"…is 17."` — coherent, confidently wrong |
+| 0.9 | 0.78 | `"The answer is 27. The answer is 27."` — wrong, looping begins |
+| 0.95 | 0.82 | `"19"` — terse, degraded |
+| 1.0 | 0.86 | `"19 is 19. 19 is 20. 19 is 20…"` — loop, flagged for review |
+| 1.1–1.2 | **0.95–1.04** | `"12 is 20 and 2 is 2…"` — collapse, flagged |
+
+Read as a ladder: **the incumbent fact survives while the injection is about a third of the
+residual; it is displaced but the output stays coherent to roughly seven-tenths; degeneracy sets in
+around eight-tenths; and the output collapses as the injection approaches parity with the residual
+it is being added into.**
+
+This puts a number on **#30**, which reasoned that the readout saturates "when the injected vector
+dominates the residual" — dominance turns out to begin near ratio 1, and the degradation is already
+well advanced at 0.8. It is also the unit in which windows from different layers, models and methods
+can be compared at all, which is why the norm printout was worth building before the search widens.
+
+**Caveat, stated plainly:** this is one layer, one prompt, one method, one model. The ladder is a
+correspondence measured once, not a validated law. Whether these ratios hold across depth is exactly
+what the full-depth layer map (`FUTURE_WORK.md` §0 step 1.6) would test.
+
+**The two direction-builders scale differently with depth, and this is structural.**
+`build_token_diff_vector` takes no layer argument at all — it is a difference of two `W_U` columns,
+so it is *the same vector at every layer* and its norm is constant by construction. Its *relative*
+size therefore shrinks as the residual grows with depth. `build_actadd_vector` reads `resid_post` at
+the injection layer, so its norm grows with the residual and its relative size stays roughly stable.
+That asymmetry is the mechanism behind **#16** (`token_diff` needs much larger coefficients) and
+behind **#1**'s roughly layer-invariant `actadd` window.
+
+*How we saw it:* the norms are logged per trial in `search_log.jsonl` as `vec_norm`, `resid_norm`,
+`norm_ratio` and `effective_ratio`; the table above is the nine-trial layer-14 acceptance sweep
+(Qwen, ChatML `"What is 7 times 8?"`, `actadd` `"7 times 8 is 20"` − `"7 times 8 is 56"`), which
+reproduced #32 byte-for-byte. The depth asymmetry was also seen directly on a gpt2 spec run —
+`actadd` norm 14.2 at layer 4 and 38.1 at layer 7, while `token_diff` held at 3.68 across both —
+but **that run was not preserved in `search_log.jsonl`**; re-run it under the harness to put the
+numbers in the record.
+
+## 39. Automatic scoring of *steered* output fails in two ways that ordinary text does not
+
+Both failures were caught by verification against known outputs, and both would have produced
+confident, wrong, plausible-looking numbers rather than obvious errors — which is the dangerous kind.
+
+**1. The prompt is part of the output, and it contains numbers.** `model.generate` returns
+prompt + continuation. An answer extractor run over the whole string can lift a number out of the
+*question* and report it as the model's answer. This is not hypothetical: at coefficient 0.95 the
+model answered `"19"`, and the extractor returned **7** — taken from `"What is 7 times 8?"`. A `7`
+against a `7 × 8` prompt reads like a real answer, so nothing about it looks like a bug. The fix is
+to score the continuation only; the prompt has to be re-rendered through the tokenizer to be stripped,
+because ChatML markers do not survive a decode round-trip. The log and report still keep the full
+unmodified text.
+
+**2. Steered loops vary a slot, so n-gram novelty misses them.** The standard degeneracy measure —
+proportion of repeated trigrams — scored `"19 is 19. 19 is 20. 19 is 20."` at **0.14**, i.e. barely
+repetitive, because the varying numeral keeps generating fresh trigrams. But it is plainly a loop,
+and this *slot-varying* shape is characteristic of what over-steering produces (compare #2's
+degeneration and #28's `"12 is 20 and 2 is 2. 12 is 20 and 2 is 2."`). A diffuse n-gram statistic and
+a back-to-back run detector measure different things, and steered output needs both: the second is
+now reported as `max_repeat_run` with `max_repeat_phrase_len`, so a repeated multi-word phrase counts
+as a loop while `"very very good"` does not.
+
+The general lesson: **metrics validated on ordinary generated text carry assumptions that steering
+violates.** Any new metric added to the harness should be checked against a known-broken output from
+this file before it is trusted — which is what `python search_scoring.py` now does.
+
+*How we saw it:* both surfaced while verifying the step-2a harness against `FINDINGS.md` #32's
+recorded outputs, not from a test written in advance.
+
+## 40. `operands_altered` cannot separate a legitimate decomposition from a substituted operand — at the string level they are the same event
+
+The `operands_altered` check exists to catch **#31**'s failure mode: the model computing on numbers
+the prompt never supplied (`140 = 7 × 20` for a `7 × 8` prompt), which a substring search for the
+target would have scored as a *success*. It works, but it is not a clean discriminator, and it cannot
+be made one by looking at strings.
+
+A correct distributive decomposition also introduces operands the prompt never gave —
+`7 × 8 = (7 × 5) + (7 × 3)` (#34) contains a `7 × 5` and a `7 × 3`. Textually that is indistinguishable
+from a substitution. The difference is **semantic, not lexical**: the decomposition is arithmetically
+equivalent to the prompt's product and the substitution is not.
+
+So the flag is correct to **raise `needs_human_review` and print the offending expressions rather
+than deciding anything** — a scorer that resolved this by guessing would be re-introducing exactly
+the #31 false-positive class it was built to kill. The harness's self-check asserts this known
+behaviour so that a future "improvement" cannot quietly remove the flag.
+
+Making it a real discriminator requires evaluating the expressions and comparing against the prompt's
+operands — which would separate three cases that matter for Stage 3 (#37): a valid decomposition, a
+substituted operand, and a *wrong identity* (`7 × 8 = (7 × 10) − (7 × 1)`, arithmetically executed
+correctly but not equal to 7 × 8). That is logged as future work, not built.
+
+*How we saw it:* the check fires on both #31's `7 × 20` and #34's `(7 × 5) + (7 × 3)`, and the
+harness's scorer self-check pins the behaviour.

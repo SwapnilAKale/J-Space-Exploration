@@ -1,0 +1,29 @@
+{
+  "model": "gpt2",
+  "defaults": {
+    "layers": [4, 7],
+    "coefficients": [0, 4, 8],
+    "max_new_tokens": 20
+  },
+  "cases": [
+    {
+      "name": "rugby_token_diff",
+      "prompt": "My favourite sport is",
+      "steering_method": "token_diff",
+      "pos": " rugby",
+      "neg": " football",
+      "target_concept": "rugby",
+      "notes": "The gpt2 demo from VERIFIED_RUNS.md. No expected answer -- there is no correct sport, so correctness is logged as null and every trial goes to human judgement."
+    },
+    {
+      "name": "weddings_actadd",
+      "prompt": "I went up to my friend and said",
+      "steering_method": "actadd",
+      "pos": "I talk about weddings constantly",
+      "neg": "I do not talk about weddings constantly",
+      "coefficients": [0, 2, 4],
+      "target_concept": "wedding",
+      "notes": "Per-case coefficients override the spec defaults. Style steering: no ground truth by design."
+    }
+  ]
+}
